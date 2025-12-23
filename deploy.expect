@@ -1,0 +1,30 @@
+#!/usr/bin/expect -f
+
+set timeout -1
+set vps_user "root"
+set vps_ip "178.128.28.19"
+set vps_pass "always@1Number"
+
+# Upload deployment package
+puts "📦 Uploading deployment package..."
+spawn scp -o StrictHostKeyChecking=no deploy.tar.gz $vps_user@$vps_ip:/tmp/
+expect "password:"
+send "$vps_pass\r"
+expect eof
+
+# Upload setup script
+puts "📦 Uploading setup script..."
+spawn scp -o StrictHostKeyChecking=no vps-setup.sh $vps_user@$vps_ip:/tmp/
+expect "password:"
+send "$vps_pass\r"
+expect eof
+
+# Execute setup script
+puts "⚙️  Running setup script on VPS..."
+spawn ssh -o StrictHostKeyChecking=no $vps_user@$vps_ip "chmod +x /tmp/vps-setup.sh && /tmp/vps-setup.sh"
+expect "password:"
+send "$vps_pass\r"
+expect eof
+
+puts "\n✅ Deployment complete!"
+puts "🌐 Your application is now available at: http://$vps_ip\n"
