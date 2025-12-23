@@ -11,7 +11,9 @@ import {
 import { ShareLinkModal } from './ShareLinkModal';
 import { FileCommentsModal } from './FileCommentsModal';
 import { ContextMenu } from './ContextMenu';
+import { MobileActionSheet } from './MobileActionSheet';
 import { StorageAnalytics } from './StorageAnalytics';
+import { ToastContainer } from './Toast';
 
 type ViewMode = 'grid' | 'list';
 type SortBy = 'date' | 'name' | 'size';
@@ -21,6 +23,12 @@ interface DeletedItem {
   file: FileRecord;
   data: Blob;
   timestamp: number;
+}
+
+interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'loading' | 'info';
 }
 
 export function VaultDashboard() {
@@ -49,7 +57,10 @@ export function VaultDashboard() {
   const [shareModalFile, setShareModalFile] = useState<FileRecord | null>(null);
   const [commentsModalFile, setCommentsModalFile] = useState<FileRecord | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileRecord } | null>(null);
+  const [mobileActionSheet, setMobileActionSheet] = useState<FileRecord | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getFileCategory = (type: string) => {
@@ -84,6 +95,15 @@ export function VaultDashboard() {
     );
   }, [files, filterType, searchQuery, sortBy, sortOrder]);
 
+  const showToast = (message: string, type: Toast['type'] = 'info') => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
   useEffect(() => {
     loadFiles();
     loadNotes();
@@ -93,6 +113,13 @@ export function VaultDashboard() {
     } else {
       document.documentElement.classList.remove('dark');
     }
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [darkMode]);
 
   useEffect(() => {
@@ -204,8 +231,11 @@ export function VaultDashboard() {
     if (!fileList || fileList.length === 0) return;
 
     setLoading(true);
+    const uploadCount = fileList.length;
+    showToast(`Uploading ${uploadCount} file${uploadCount > 1 ? 's' : ''}...`, 'loading');
 
     try {
+      let successCount = 0;
       for (let i = 0; i < fileList.length; i++) {
         const result = await storage.saveFile(fileList[i]);
         if (result.isDuplicate && result.duplicateOf) {
@@ -214,12 +244,18 @@ export function VaultDashboard() {
           );
           if (shouldUpload) {
             await storage.saveFile(fileList[i], true);
+            successCount++;
           }
+        } else {
+          successCount++;
         }
       }
       await loadFiles();
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast(`Successfully uploaded ${successCount} file${successCount > 1 ? 's' : ''}!`, 'success');
     } catch (error) {
-      alert('Error uploading files: ' + error);
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Error uploading files: ' + error, 'error');
     }
 
     setLoading(false);
@@ -230,6 +266,7 @@ export function VaultDashboard() {
     if (!noteContent.trim()) return;
 
     setLoading(true);
+    showToast('Creating note...', 'loading');
     try {
       await storage.saveNote({
         title: noteTitle.trim() || 'Untitled',
@@ -239,24 +276,35 @@ export function VaultDashboard() {
       setNoteContent('');
       setShowNoteModal(false);
       await loadNotes();
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Note created successfully!', 'success');
     } catch (error) {
-      alert('Error creating note: ' + error);
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Error creating note: ' + error, 'error');
     }
     setLoading(false);
   };
 
   const handleDeleteFile = async (file: FileRecord) => {
-    const data = await storage.getFileData(file.id);
-    if (data) {
-      setDeletedItems(prev => [...prev, { file, data, timestamp: Date.now() }]);
+    showToast('Deleting file...', 'loading');
+    try {
+      const data = await storage.getFileData(file.id);
+      if (data) {
+        setDeletedItems(prev => [...prev, { file, data, timestamp: Date.now() }]);
+      }
+      await storage.deleteFile(file.id);
+      setSelectedFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.id);
+        return newSet;
+      });
+      await loadFiles();
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('File deleted successfully!', 'success');
+    } catch (error) {
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Error deleting file', 'error');
     }
-    await storage.deleteFile(file.id);
-    setSelectedFiles(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(file.id);
-      return newSet;
-    });
-    await loadFiles();
   };
 
   const handleBulkDelete = async () => {
@@ -294,15 +342,27 @@ export function VaultDashboard() {
   };
 
   const handleDownloadFile = async (file: FileRecord) => {
-    const blob = await storage.getFileData(file.id);
-    if (!blob) return;
+    showToast('Preparing download...', 'loading');
+    try {
+      const blob = await storage.getFileData(file.id);
+      if (!blob) {
+        setToasts(prev => prev.filter(t => t.type !== 'loading'));
+        showToast('Error: File not found', 'error');
+        return;
+      }
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    a.click();
-    URL.revokeObjectURL(url);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      a.click();
+      URL.revokeObjectURL(url);
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Download started!', 'success');
+    } catch (error) {
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Error downloading file', 'error');
+    }
   };
 
   const handleBulkDownload = async () => {
@@ -317,11 +377,22 @@ export function VaultDashboard() {
   const handlePreviewFile = async (file: FileRecord) => {
     if (!isPreviewable(file)) return;
 
-    const blob = await storage.getFileData(file.id);
-    if (!blob) return;
+    showToast('Loading preview...', 'loading');
+    try {
+      const blob = await storage.getFileData(file.id);
+      if (!blob) {
+        setToasts(prev => prev.filter(t => t.type !== 'loading'));
+        showToast('Error loading preview', 'error');
+        return;
+      }
 
-    const url = URL.createObjectURL(blob);
-    setPreviewFile({ file, url });
+      const url = URL.createObjectURL(blob);
+      setPreviewFile({ file, url });
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+    } catch (error) {
+      setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      showToast('Error loading preview', 'error');
+    }
   };
 
   const closePreview = () => {
@@ -334,8 +405,13 @@ export function VaultDashboard() {
   const toggleFavorite = async (fileId: string) => {
     const file = files.find(f => f.id === fileId);
     if (!file) return;
-    await storage.updateFile(fileId, { favorite: !file.favorite });
-    await loadFiles();
+    try {
+      await storage.updateFile(fileId, { favorite: !file.favorite });
+      await loadFiles();
+      showToast(file.favorite ? 'Removed from favorites' : 'Added to favorites', 'success');
+    } catch (error) {
+      showToast('Error updating favorite', 'error');
+    }
   };
 
   const startRenaming = (file: FileRecord) => {
@@ -345,9 +421,14 @@ export function VaultDashboard() {
 
   const handleRename = async (fileId: string) => {
     if (!editingFileName.trim()) return;
-    await storage.updateFile(fileId, { name: editingFileName.trim() });
-    setEditingFileId(null);
-    await loadFiles();
+    try {
+      await storage.updateFile(fileId, { name: editingFileName.trim() });
+      setEditingFileId(null);
+      await loadFiles();
+      showToast('File renamed successfully!', 'success');
+    } catch (error) {
+      showToast('Error renaming file', 'error');
+    }
   };
 
   const toggleFileSelection = (fileId: string) => {
@@ -364,16 +445,21 @@ export function VaultDashboard() {
 
   const handleContextMenu = (e: React.MouseEvent, file: FileRecord) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, file });
+    if (isMobile) {
+      setMobileActionSheet(file);
+    } else {
+      setContextMenu({ x: e.clientX, y: e.clientY, file });
+    }
   };
 
   const getFileIcon = (type: string) => {
-    if (type.startsWith('image/')) return <ImageIcon className="w-6 h-6" />;
-    if (type.startsWith('video/')) return <Video className="w-6 h-6" />;
-    if (type.startsWith('audio/')) return <Music className="w-6 h-6" />;
-    if (type.includes('zip') || type.includes('rar') || type.includes('tar')) return <FileArchive className="w-6 h-6" />;
-    if (type.includes('javascript') || type.includes('python') || type.includes('code')) return <Code className="w-6 h-6" />;
-    return <File className="w-6 h-6" />;
+    const iconClass = isMobile ? "w-5 h-5" : "w-6 h-6";
+    if (type.startsWith('image/')) return <ImageIcon className={iconClass} />;
+    if (type.startsWith('video/')) return <Video className={iconClass} />;
+    if (type.startsWith('audio/')) return <Music className={iconClass} />;
+    if (type.includes('zip') || type.includes('rar') || type.includes('tar')) return <FileArchive className={iconClass} />;
+    if (type.includes('javascript') || type.includes('python') || type.includes('code')) return <Code className={iconClass} />;
+    return <File className={iconClass} />;
   };
 
   const getFileColor = (type: string) => {
@@ -445,42 +531,49 @@ export function VaultDashboard() {
       onDrop={handleDrop}
     >
       <nav className={`${darkMode ? 'bg-slate-900/80' : 'bg-white/80'} backdrop-blur-sm border-b ${darkMode ? 'border-slate-700' : 'border-gray-200'} sticky top-0 z-20 transition-colors`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-slate-900 to-slate-700 dark:from-slate-700 dark:to-slate-500 rounded-xl flex items-center justify-center shadow-lg">
-                <Lock className="w-5 h-5 text-white" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-14 sm:h-16">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-slate-900 to-slate-700 dark:from-slate-700 dark:to-slate-500 rounded-lg sm:rounded-xl flex items-center justify-center shadow-lg">
+                <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
               <div>
-                <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>zaroxbox</h1>
-                <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>Unlimited Storage</p>
+                <h1 className={`text-base sm:text-xl font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>zaroxbox</h1>
+                <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'} hidden sm:block`}>Unlimited Storage</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>{user?.email}</span>
+            <div className="flex items-center gap-1.5 sm:gap-4">
+              <span className={`text-xs sm:text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'} hidden lg:inline`}>{user?.email}</span>
               <button
                 onClick={toggleDarkMode}
-                className={`p-2 rounded-lg transition-colors ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                title="Toggle dark mode (Ctrl+D)"
+                className={`p-1.5 sm:p-2 rounded-lg transition-colors touch-manipulation ${darkMode ? 'bg-slate-800 text-yellow-400 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                title="Toggle dark mode"
               >
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                {darkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
               <button
                 onClick={() => setShowShortcuts(!showShortcuts)}
-                className={`text-xs ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-900'} transition-colors`}
+                className={`hidden md:inline text-xs ${darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-900'} transition-colors`}
               >
                 Press <kbd className={`px-2 py-1 ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'} rounded`}>?</kbd> for shortcuts
               </button>
               <button
                 onClick={signOut}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                className={`hidden sm:flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg transition-colors touch-manipulation ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm">Sign Out</span>
+              </button>
+              <button
+                onClick={signOut}
+                className={`sm:hidden p-1.5 rounded-lg transition-colors touch-manipulation ${darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 title="Sign out"
               >
                 <LogOut className="w-4 h-4" />
-                <span className="text-sm">Sign Out</span>
               </button>
-              <div className="text-right">
-                <div className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`}>{files.length} files</div>
+              <div className="text-right hidden sm:block">
+                <div className={`text-xs sm:text-sm font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`}>{files.length} files</div>
                 <div className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>{formatBytes(getTotalSize())} stored</div>
               </div>
             </div>
@@ -504,42 +597,42 @@ export function VaultDashboard() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
-          <div className={`${darkMode ? 'from-blue-600 to-blue-700' : 'from-blue-500 to-blue-600'} bg-gradient-to-br rounded-2xl p-6 text-white shadow-lg`}>
-            <div className="flex items-center justify-between mb-2">
-              <HardDrive className="w-8 h-8 opacity-80" />
-              <Zap className="w-5 h-5" />
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 mb-6 sm:mb-8">
+          <div className={`${darkMode ? 'from-blue-600 to-blue-700' : 'from-blue-500 to-blue-600'} bg-gradient-to-br rounded-xl sm:rounded-2xl p-3 sm:p-6 text-white shadow-lg`}>
+            <div className="flex items-center justify-between mb-1 sm:mb-2">
+              <HardDrive className="w-5 h-5 sm:w-8 sm:h-8 opacity-80" />
+              <Zap className="w-3 h-3 sm:w-5 sm:h-5" />
             </div>
-            <div className="text-3xl font-bold mb-1">{files.length}</div>
-            <div className={`${darkMode ? 'text-blue-200' : 'text-blue-100'} text-sm`}>Total Files</div>
+            <div className="text-xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{files.length}</div>
+            <div className={`${darkMode ? 'text-blue-200' : 'text-blue-100'} text-xs sm:text-sm`}>Total Files</div>
           </div>
 
-          <div className={`${darkMode ? 'from-emerald-600 to-emerald-700' : 'from-emerald-500 to-emerald-600'} bg-gradient-to-br rounded-2xl p-6 text-white shadow-lg`}>
-            <div className="flex items-center justify-between mb-2">
-              <ImageIcon className="w-8 h-8 opacity-80" />
-              <TrendingUp className="w-5 h-5" />
+          <div className={`${darkMode ? 'from-emerald-600 to-emerald-700' : 'from-emerald-500 to-emerald-600'} bg-gradient-to-br rounded-xl sm:rounded-2xl p-3 sm:p-6 text-white shadow-lg`}>
+            <div className="flex items-center justify-between mb-1 sm:mb-2">
+              <ImageIcon className="w-5 h-5 sm:w-8 sm:h-8 opacity-80" />
+              <TrendingUp className="w-3 h-3 sm:w-5 sm:h-5" />
             </div>
-            <div className="text-3xl font-bold mb-1">{files.filter(f => f.type.startsWith('image/')).length}</div>
-            <div className={`${darkMode ? 'text-emerald-200' : 'text-emerald-100'} text-sm`}>Images</div>
+            <div className="text-xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{files.filter(f => f.type.startsWith('image/')).length}</div>
+            <div className={`${darkMode ? 'text-emerald-200' : 'text-emerald-100'} text-xs sm:text-sm`}>Images</div>
           </div>
 
-          <div className={`${darkMode ? 'from-amber-600 to-amber-700' : 'from-amber-500 to-amber-600'} bg-gradient-to-br rounded-2xl p-6 text-white shadow-lg`}>
-            <div className="flex items-center justify-between mb-2">
-              <Star className="w-8 h-8 opacity-80" />
-              <TrendingUp className="w-5 h-5" />
+          <div className={`${darkMode ? 'from-amber-600 to-amber-700' : 'from-amber-500 to-amber-600'} bg-gradient-to-br rounded-xl sm:rounded-2xl p-3 sm:p-6 text-white shadow-lg`}>
+            <div className="flex items-center justify-between mb-1 sm:mb-2">
+              <Star className="w-5 h-5 sm:w-8 sm:h-8 opacity-80" />
+              <TrendingUp className="w-3 h-3 sm:w-5 sm:h-5" />
             </div>
-            <div className="text-3xl font-bold mb-1">{files.filter(f => f.favorite).length}</div>
-            <div className={`${darkMode ? 'text-amber-200' : 'text-amber-100'} text-sm`}>Favorites</div>
+            <div className="text-xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{files.filter(f => f.favorite).length}</div>
+            <div className={`${darkMode ? 'text-amber-200' : 'text-amber-100'} text-xs sm:text-sm`}>Favorites</div>
           </div>
 
-          <div className={`${darkMode ? 'from-purple-600 to-purple-700' : 'from-purple-500 to-purple-600'} bg-gradient-to-br rounded-2xl p-6 text-white shadow-lg`}>
-            <div className="flex items-center justify-between mb-2">
-              <FileText className="w-8 h-8 opacity-80" />
-              <TrendingUp className="w-5 h-5" />
+          <div className={`${darkMode ? 'from-purple-600 to-purple-700' : 'from-purple-500 to-purple-600'} bg-gradient-to-br rounded-xl sm:rounded-2xl p-3 sm:p-6 text-white shadow-lg`}>
+            <div className="flex items-center justify-between mb-1 sm:mb-2">
+              <FileText className="w-5 h-5 sm:w-8 sm:h-8 opacity-80" />
+              <TrendingUp className="w-3 h-3 sm:w-5 sm:h-5" />
             </div>
-            <div className="text-3xl font-bold mb-1">{notes.length}</div>
-            <div className={`${darkMode ? 'text-purple-200' : 'text-purple-100'} text-sm`}>Notes</div>
+            <div className="text-xl sm:text-3xl font-bold mb-0.5 sm:mb-1">{notes.length}</div>
+            <div className={`${darkMode ? 'text-purple-200' : 'text-purple-100'} text-xs sm:text-sm`}>Notes</div>
           </div>
         </div>
 
@@ -1301,6 +1394,48 @@ export function VaultDashboard() {
           onClose={() => setShowAnalytics(false)}
         />
       )}
+
+      {mobileActionSheet && (
+        <MobileActionSheet
+          file={mobileActionSheet}
+          darkMode={darkMode}
+          onClose={() => setMobileActionSheet(null)}
+          onDownload={() => {
+            handleDownloadFile(mobileActionSheet);
+            setMobileActionSheet(null);
+          }}
+          onDelete={() => {
+            handleDeleteFile(mobileActionSheet);
+            setMobileActionSheet(null);
+          }}
+          onToggleFavorite={() => {
+            toggleFavorite(mobileActionSheet.id);
+            setMobileActionSheet(null);
+          }}
+          onRename={() => {
+            startRenaming(mobileActionSheet);
+            setMobileActionSheet(null);
+          }}
+          onComments={() => {
+            setCommentsModalFile(mobileActionSheet);
+            setMobileActionSheet(null);
+          }}
+          onShare={() => {
+            setShareModalFile(mobileActionSheet);
+            setMobileActionSheet(null);
+          }}
+          onPreview={
+            isPreviewable(mobileActionSheet)
+              ? () => {
+                  handlePreviewFile(mobileActionSheet);
+                  setMobileActionSheet(null);
+                }
+              : undefined
+          }
+        />
+      )}
+
+      <ToastContainer toasts={toasts} darkMode={darkMode} onRemove={removeToast} />
     </div>
   );
 }
