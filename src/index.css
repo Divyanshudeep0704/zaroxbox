@@ -3,6 +3,62 @@
 @tailwind utilities;
 
 @layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 768px) {
+    .mobile-fixed-bottom {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+    }
+
+    .mobile-full-screen {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+    }
+
+    .mobile-scroll-snap {
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-scroll-snap > * {
+      scroll-snap-align: start;
+    }
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+@supports (-webkit-touch-callout: none) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@layer utilities {
   .animate-fadeIn {
     animation: fadeIn 0.2s ease-in-out;
   }
