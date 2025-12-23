@@ -1435,11 +1435,6 @@ export function VaultDashboard() {
               const isOfficeFile = officeExtensions.some(ext => fileName.endsWith(ext));
 
               if (isOfficeFile) {
-                setTimeout(() => {
-                  setPreviewLoading(false);
-                  setToasts(prev => prev.filter(t => t.type !== 'loading'));
-                }, 2000);
-
                 const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewFile.url)}`;
 
                 return (
@@ -1464,17 +1459,32 @@ export function VaultDashboard() {
                         Download
                       </button>
                     </div>
-                    <div className="flex-1 relative">
+                    <div className="flex-1 relative bg-slate-50 dark:bg-slate-900">
+                      {previewLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-900 z-10">
+                          <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 dark:border-slate-100 mx-auto mb-4"></div>
+                            <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>Loading preview...</p>
+                          </div>
+                        </div>
+                      )}
                       <iframe
                         src={viewerUrl}
                         className="w-full h-full border-0"
                         title={previewFile.file.name}
-                        allow="autoplay"
-                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                        onLoad={() => {
+                          setPreviewLoading(false);
+                          setToasts(prev => prev.filter(t => t.type !== 'loading'));
+                        }}
+                        onError={() => {
+                          setPreviewLoading(false);
+                          setToasts(prev => prev.filter(t => t.type !== 'loading'));
+                          showToast('Preview service unavailable. Try downloading the file.', 'error');
+                        }}
                       />
-                      <div className={`absolute inset-x-0 bottom-0 ${darkMode ? 'bg-gradient-to-t from-slate-900/80' : 'bg-gradient-to-t from-white/80'} p-4 text-center`}>
-                        <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                          Preview powered by Microsoft Office Online
+                      <div className={`absolute inset-x-0 bottom-0 pointer-events-none ${darkMode ? 'bg-gradient-to-t from-slate-900/50' : 'bg-gradient-to-t from-white/50'} p-2 text-center`}>
+                        <p className={`text-xs ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                          Powered by Microsoft Office Online
                         </p>
                       </div>
                     </div>

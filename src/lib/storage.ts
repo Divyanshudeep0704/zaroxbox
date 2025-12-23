@@ -211,11 +211,12 @@ export const storage = {
 
     if (recordError || !fileRecord) return null;
 
-    const { data } = supabase.storage
+    const { data, error } = await supabase.storage
       .from('vault-files')
-      .getPublicUrl(fileRecord.storage_path);
+      .createSignedUrl(fileRecord.storage_path, 3600);
 
-    return data.publicUrl;
+    if (error) throw error;
+    return data?.signedUrl || null;
   },
 
   async deleteFile(id: string): Promise<void> {
