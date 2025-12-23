@@ -363,17 +363,24 @@ export function VaultDashboard() {
         return;
       }
 
-      const url = URL.createObjectURL(blob);
+      const blobWithType = new Blob([blob], { type: file.type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blobWithType);
       const a = document.createElement('a');
       a.href = url;
       a.download = file.name;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 100);
+
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
       showToast('Download started!', 'success');
     } catch (error) {
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
-      showToast('Error downloading file', 'error');
+      showToast('Error downloading file: ' + error, 'error');
     }
   };
 
@@ -394,39 +401,58 @@ export function VaultDashboard() {
     setTextContent('');
 
     try {
-      const blob = await storage.getFileData(file.id);
-      if (!blob) {
-        setToasts(prev => prev.filter(t => t.type !== 'loading'));
-        setPreviewLoading(false);
-        showToast('Error loading preview', 'error');
-        return;
-      }
-
       const fileName = file.name.toLowerCase();
-      const textExtensions = ['.txt', '.md', '.json', '.xml', '.csv', '.log'];
-      const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.sql', '.sh', '.yaml', '.yml'];
-      const isTextFile = file.type === 'text/plain' ||
-                         textExtensions.some(ext => fileName.endsWith(ext)) ||
-                         codeExtensions.some(ext => fileName.endsWith(ext));
+      const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx'];
+      const isOfficeFile = officeExtensions.some(ext => fileName.endsWith(ext));
 
-      if (isTextFile) {
-        const text = await blob.text();
-        setTextContent(text);
+      let url: string;
+
+      if (isOfficeFile) {
+        const publicUrl = await storage.getPublicFileUrl(file.id);
+        if (!publicUrl) {
+          setToasts(prev => prev.filter(t => t.type !== 'loading'));
+          setPreviewLoading(false);
+          showToast('Error loading preview', 'error');
+          return;
+        }
+        url = publicUrl;
+      } else {
+        const blob = await storage.getFileData(file.id);
+        if (!blob) {
+          setToasts(prev => prev.filter(t => t.type !== 'loading'));
+          setPreviewLoading(false);
+          showToast('Error loading preview', 'error');
+          return;
+        }
+
+        const textExtensions = ['.txt', '.md', '.json', '.xml', '.csv', '.log'];
+        const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.sql', '.sh', '.yaml', '.yml'];
+        const isTextFile = file.type === 'text/plain' ||
+                           textExtensions.some(ext => fileName.endsWith(ext)) ||
+                           codeExtensions.some(ext => fileName.endsWith(ext));
+
+        if (isTextFile) {
+          const text = await blob.text();
+          setTextContent(text);
+        }
+
+        url = URL.createObjectURL(blob);
       }
 
-      const url = URL.createObjectURL(blob);
       setPreviewFile({ file, url });
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
     } catch (error) {
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
       setPreviewLoading(false);
-      showToast('Error loading preview', 'error');
+      showToast('Error loading preview: ' + error, 'error');
     }
   };
 
   const closePreview = () => {
     if (previewFile) {
-      URL.revokeObjectURL(previewFile.url);
+      if (previewFile.url.startsWith('blob:')) {
+        URL.revokeObjectURL(previewFile.url);
+      }
       setPreviewFile(null);
       setPreviewLoading(false);
       setTextContent('');
@@ -504,15 +530,25 @@ export function VaultDashboard() {
 
   const isPreviewable = (file: FileRecord) => {
     const fileName = file.name.toLowerCase();
-    const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.odt', '.odp', '.ods'];
+    const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx'];
     const textExtensions = ['.txt', '.md', '.json', '.xml', '.csv', '.log'];
     const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.sql', '.sh', '.yaml', '.yml'];
+
+    const officeMimeTypes = [
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
 
     return file.type.startsWith('image/') ||
            file.type.startsWith('video/') ||
            file.type.startsWith('audio/') ||
            file.type === 'application/pdf' ||
            file.type === 'text/plain' ||
+           officeMimeTypes.includes(file.type) ||
            officeExtensions.some(ext => fileName.endsWith(ext)) ||
            textExtensions.some(ext => fileName.endsWith(ext)) ||
            codeExtensions.some(ext => fileName.endsWith(ext));
@@ -1377,71 +1413,71 @@ export function VaultDashboard() {
               </div>
             )}
             {previewFile.file.type === 'application/pdf' && (
-              <div className="w-full h-full flex items-center justify-center">
-                <object
-                  data={`${previewFile.url}#toolbar=1&navpanes=1&scrollbar=1`}
-                  type="application/pdf"
-                  className="w-full h-full rounded-lg"
-                  onLoad={() => setPreviewLoading(false)}
-                >
-                  <embed
-                    src={`${previewFile.url}#toolbar=1&navpanes=1&scrollbar=1`}
-                    type="application/pdf"
-                    className="w-full h-full rounded-lg"
-                    onLoad={() => setPreviewLoading(false)}
-                  />
-                  <div className={`${darkMode ? 'bg-slate-800' : 'bg-white'} rounded-2xl p-12 max-w-2xl mx-auto text-center`}>
-                    <div className={`w-20 h-20 ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
-                      <FileText className={`w-10 h-10 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
-                    </div>
-                    <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                      {previewFile.file.name}
-                    </h3>
-                    <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {formatBytes(previewFile.file.size)} • PDF Document
-                    </p>
-                    <p className={`mb-8 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                      Your browser doesn't support inline PDF viewing. Download the file to view it.
-                    </p>
-                    <button
-                      onClick={() => handleDownloadFile(previewFile.file)}
-                      className={`px-8 py-3 ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 hover:bg-slate-800'} text-white rounded-xl font-medium transition-colors flex items-center gap-2 mx-auto`}
-                    >
-                      <Download className="w-5 h-5" />
-                      Download PDF
-                    </button>
-                  </div>
-                </object>
+              <div className="w-full h-full">
+                <iframe
+                  src={`${previewFile.url}#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+                  className="w-full h-full rounded-lg border-0"
+                  title={previewFile.file.name}
+                  onLoad={() => {
+                    setPreviewLoading(false);
+                    setToasts(prev => prev.filter(t => t.type !== 'loading'));
+                  }}
+                  onError={() => {
+                    setPreviewLoading(false);
+                    setToasts(prev => prev.filter(t => t.type !== 'loading'));
+                  }}
+                />
               </div>
             )}
             {(() => {
               const fileName = previewFile.file.name.toLowerCase();
-              const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.odt', '.odp', '.ods'];
+              const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx'];
               const isOfficeFile = officeExtensions.some(ext => fileName.endsWith(ext));
 
               if (isOfficeFile) {
-                setPreviewLoading(false);
+                setTimeout(() => {
+                  setPreviewLoading(false);
+                  setToasts(prev => prev.filter(t => t.type !== 'loading'));
+                }, 2000);
+
+                const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(previewFile.url)}`;
+
                 return (
-                  <div className={`${darkMode ? 'bg-slate-800' : 'bg-white'} rounded-2xl p-12 max-w-2xl mx-auto text-center`}>
-                    <div className={`w-20 h-20 ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
-                      <FileText className={`w-10 h-10 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                  <div className="w-full h-full flex flex-col">
+                    <div className={`flex items-center justify-between p-4 ${darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'} border-b`}>
+                      <div className="flex items-center gap-3">
+                        <FileText className={`w-5 h-5 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                        <div>
+                          <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {previewFile.file.name}
+                          </h3>
+                          <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                            {formatBytes(previewFile.file.size)} • Office Document
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDownloadFile(previewFile.file)}
+                        className={`px-4 py-2 ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 hover:bg-slate-800'} text-white rounded-lg font-medium transition-colors flex items-center gap-2 text-sm`}
+                      >
+                        <Download className="w-4 h-4" />
+                        Download
+                      </button>
                     </div>
-                    <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
-                      {previewFile.file.name}
-                    </h3>
-                    <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                      {formatBytes(previewFile.file.size)} • Office Document
-                    </p>
-                    <p className={`mb-8 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
-                      Preview for this file type is available. Click download to open it in your preferred application.
-                    </p>
-                    <button
-                      onClick={() => handleDownloadFile(previewFile.file)}
-                      className={`px-8 py-3 ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 hover:bg-slate-800'} text-white rounded-xl font-medium transition-colors flex items-center gap-2 mx-auto`}
-                    >
-                      <Download className="w-5 h-5" />
-                      Download File
-                    </button>
+                    <div className="flex-1 relative">
+                      <iframe
+                        src={viewerUrl}
+                        className="w-full h-full border-0"
+                        title={previewFile.file.name}
+                        allow="autoplay"
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                      />
+                      <div className={`absolute inset-x-0 bottom-0 ${darkMode ? 'bg-gradient-to-t from-slate-900/80' : 'bg-gradient-to-t from-white/80'} p-4 text-center`}>
+                        <p className={`text-xs ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                          Preview powered by Microsoft Office Online
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 );
               }

@@ -99,6 +99,40 @@ export const storage = {
     return data || [];
   },
 
+  getFileType(file: File): string {
+    if (file.type) return file.type;
+
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'txt': 'text/plain',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'svg': 'image/svg+xml',
+      'mp4': 'video/mp4',
+      'mp3': 'audio/mpeg',
+      'zip': 'application/zip',
+      'rar': 'application/x-rar-compressed',
+      '7z': 'application/x-7z-compressed',
+      'json': 'application/json',
+      'xml': 'application/xml',
+      'html': 'text/html',
+      'css': 'text/css',
+      'js': 'text/javascript',
+      'ts': 'text/typescript',
+    };
+
+    return mimeTypes[extension || ''] || 'application/octet-stream';
+  },
+
   async saveFile(file: File, skipDuplicateCheck = false): Promise<{ file: FileRecord; isDuplicate: boolean; duplicateOf?: FileRecord }> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
@@ -114,10 +148,15 @@ export const storage = {
 
     const fileId = crypto.randomUUID();
     const filePath = `${user.id}/${fileId}`;
+    const fileType = this.getFileType(file);
 
     const { error: uploadError } = await supabase.storage
       .from('vault-files')
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        contentType: fileType,
+        cacheControl: '3600',
+        upsert: false
+      });
 
     if (uploadError) throw uploadError;
 
@@ -129,7 +168,7 @@ export const storage = {
           user_id: user.id,
           name: file.name,
           size: file.size,
-          type: file.type,
+          type: fileType,
           storage_path: filePath,
         },
       ])
@@ -161,6 +200,22 @@ export const storage = {
 
     if (error) throw error;
     return data;
+  },
+
+  async getPublicFileUrl(id: string): Promise<string | null> {
+    const { data: fileRecord, error: recordError } = await supabase
+      .from('files')
+      .select('storage_path')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (recordError || !fileRecord) return null;
+
+    const { data } = supabase.storage
+      .from('vault-files')
+      .getPublicUrl(fileRecord.storage_path);
+
+    return data.publicUrl;
   },
 
   async deleteFile(id: string): Promise<void> {
