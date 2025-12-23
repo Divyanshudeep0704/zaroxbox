@@ -125,6 +125,16 @@ export function VaultDashboard() {
   }, [darkMode]);
 
   useEffect(() => {
+    if (previewFile && previewFile.file.type === 'application/pdf') {
+      const timer = setTimeout(() => {
+        setPreviewLoading(false);
+        setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [previewFile]);
+
+  useEffect(() => {
     const handleKeyboard = (e: KeyboardEvent) => {
       if (e.key === '/' && e.ctrlKey) {
         e.preventDefault();
@@ -1367,16 +1377,42 @@ export function VaultDashboard() {
               </div>
             )}
             {previewFile.file.type === 'application/pdf' && (
-              <iframe
-                src={previewFile.url}
-                className="w-full h-full rounded-lg"
-                title={previewFile.file.name}
-                onLoad={() => setPreviewLoading(false)}
-                onError={() => {
-                  setPreviewLoading(false);
-                  showToast('Error loading PDF', 'error');
-                }}
-              />
+              <div className="w-full h-full flex items-center justify-center">
+                <object
+                  data={`${previewFile.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                  type="application/pdf"
+                  className="w-full h-full rounded-lg"
+                  onLoad={() => setPreviewLoading(false)}
+                >
+                  <embed
+                    src={`${previewFile.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                    type="application/pdf"
+                    className="w-full h-full rounded-lg"
+                    onLoad={() => setPreviewLoading(false)}
+                  />
+                  <div className={`${darkMode ? 'bg-slate-800' : 'bg-white'} rounded-2xl p-12 max-w-2xl mx-auto text-center`}>
+                    <div className={`w-20 h-20 ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
+                      <FileText className={`w-10 h-10 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                    </div>
+                    <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {previewFile.file.name}
+                    </h3>
+                    <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {formatBytes(previewFile.file.size)} • PDF Document
+                    </p>
+                    <p className={`mb-8 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                      Your browser doesn't support inline PDF viewing. Download the file to view it.
+                    </p>
+                    <button
+                      onClick={() => handleDownloadFile(previewFile.file)}
+                      className={`px-8 py-3 ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 hover:bg-slate-800'} text-white rounded-xl font-medium transition-colors flex items-center gap-2 mx-auto`}
+                    >
+                      <Download className="w-5 h-5" />
+                      Download PDF
+                    </button>
+                  </div>
+                </object>
+              </div>
             )}
             {(() => {
               const fileName = previewFile.file.name.toLowerCase();
