@@ -104,6 +104,15 @@ See `DEPLOY-NOW.md` for step-by-step instructions.
 ✅ User authentication (email/password)
 ✅ File upload and storage
 ✅ File organization (folders)
+✅ **Universal File Preview** - Preview any file type:
+  - 🖼️ Images (JPG, PNG, GIF, SVG, WebP)
+  - 🎥 Videos (MP4, WebM, AVI, MOV)
+  - 🎵 Audio (MP3, WAV, OGG)
+  - 📄 PDFs with full document viewer
+  - 📝 Text files (TXT, MD, CSV, LOG)
+  - 💻 Code files (JS, TS, Python, Java, CSS, HTML, etc.)
+  - 📊 Office documents (PPT, Word, Excel) with download option
+  - ⏳ Loading states with smooth animations
 ✅ File sharing with expiring links
 ✅ File comments and collaboration
 ✅ Storage analytics

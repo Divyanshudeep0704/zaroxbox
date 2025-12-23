@@ -30,12 +30,23 @@ Every user action now provides immediate visual feedback through toast notificat
 - **Creating Note**: "Creating note..." → "Note created successfully!"
 
 #### Preview Loading States
-- **Images**: Shows loading spinner until image loads, then displays
-- **Videos**: Shows loading spinner until video data loads, then displays
-- **Audio**: Shows loading spinner until audio data loads, then displays
-- **PDFs**: Shows loading spinner until PDF loads in iframe, then displays
-- **PPT/Documents**: Shows loading spinner overlay during load
-- **Error Handling**: If preview fails, shows error toast and removes spinner
+All file types now support live preview with loading states:
+
+**Media Files:**
+- **Images** (JPG, PNG, GIF, SVG, WebP): Shows loading spinner until image loads, then displays
+- **Videos** (MP4, WebM, AVI, MOV): Shows loading spinner until video data loads, then displays player
+- **Audio** (MP3, WAV, OGG): Shows loading spinner until audio data loads, then displays player
+
+**Documents:**
+- **PDFs**: Shows loading spinner until PDF loads in iframe, then displays full document viewer
+- **Text Files** (TXT, MD, CSV, LOG): Shows loading spinner, reads content, displays in formatted viewer
+- **Code Files** (JS, TS, Python, Java, CSS, HTML, etc.): Shows loading spinner, displays with monospace font
+- **Office Documents** (PPT, PPTX, Word, Excel): Shows preview screen with download button
+
+**Error Handling:**
+- If preview fails, shows error toast specific to file type
+- Loading spinner automatically disappears
+- User can close preview and try again
 
 ### Toast Features
 - **Auto-dismiss**: Success and info toasts auto-dismiss after 3 seconds
@@ -193,11 +204,14 @@ All icons are dynamically sized for mobile devices:
 - [ ] Delete file - see loading → success toast + undo option
 - [ ] Rename file - see success toast
 - [ ] Add to favorites - see success toast
-- [ ] Preview image - see spinner until image loads
-- [ ] Preview video - see spinner until video loads
-- [ ] Preview audio - see spinner until audio loads
+- [ ] Preview image (JPG/PNG) - see spinner until image loads
+- [ ] Preview video (MP4) - see spinner until video loads
+- [ ] Preview audio (MP3) - see spinner until audio loads
 - [ ] Preview PDF - see spinner until PDF loads
-- [ ] Preview PPT/document - see spinner during load
+- [ ] Preview text file (.txt) - see spinner then formatted text
+- [ ] Preview code file (.js/.ts) - see spinner then code with monospace
+- [ ] Preview Office doc (PPT/Word/Excel) - see download screen
+- [ ] Preview error handling - verify error toast appears on failure
 - [ ] Tap file on mobile - see action sheet
 - [ ] All icons properly sized on mobile
 - [ ] All touch targets easily tappable

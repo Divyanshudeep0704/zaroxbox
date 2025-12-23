@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Video, Music, FileArchive, Code, Search,
   Grid3x3, List, Zap, HardDrive, TrendingUp, X, Moon, Sun,
   ArrowUpDown, Star, Edit2, Check, Undo2, CheckSquare, Square, MoreVertical, LogOut,
-  Share2, MessageCircle
+  Share2, MessageCircle, Loader
 } from 'lucide-react';
 import { ShareLinkModal } from './ShareLinkModal';
 import { FileCommentsModal } from './FileCommentsModal';
@@ -62,6 +62,7 @@ export function VaultDashboard() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [textContent, setTextContent] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getFileCategory = (type: string) => {
@@ -380,6 +381,8 @@ export function VaultDashboard() {
 
     showToast('Loading preview...', 'loading');
     setPreviewLoading(true);
+    setTextContent('');
+
     try {
       const blob = await storage.getFileData(file.id);
       if (!blob) {
@@ -387,6 +390,18 @@ export function VaultDashboard() {
         setPreviewLoading(false);
         showToast('Error loading preview', 'error');
         return;
+      }
+
+      const fileName = file.name.toLowerCase();
+      const textExtensions = ['.txt', '.md', '.json', '.xml', '.csv', '.log'];
+      const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.sql', '.sh', '.yaml', '.yml'];
+      const isTextFile = file.type === 'text/plain' ||
+                         textExtensions.some(ext => fileName.endsWith(ext)) ||
+                         codeExtensions.some(ext => fileName.endsWith(ext));
+
+      if (isTextFile) {
+        const text = await blob.text();
+        setTextContent(text);
       }
 
       const url = URL.createObjectURL(blob);
@@ -404,6 +419,7 @@ export function VaultDashboard() {
       URL.revokeObjectURL(previewFile.url);
       setPreviewFile(null);
       setPreviewLoading(false);
+      setTextContent('');
     }
   };
 
@@ -477,10 +493,19 @@ export function VaultDashboard() {
   };
 
   const isPreviewable = (file: FileRecord) => {
+    const fileName = file.name.toLowerCase();
+    const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.odt', '.odp', '.ods'];
+    const textExtensions = ['.txt', '.md', '.json', '.xml', '.csv', '.log'];
+    const codeExtensions = ['.js', '.jsx', '.ts', '.tsx', '.css', '.html', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.sql', '.sh', '.yaml', '.yml'];
+
     return file.type.startsWith('image/') ||
            file.type.startsWith('video/') ||
            file.type.startsWith('audio/') ||
-           file.type === 'application/pdf';
+           file.type === 'application/pdf' ||
+           file.type === 'text/plain' ||
+           officeExtensions.some(ext => fileName.endsWith(ext)) ||
+           textExtensions.some(ext => fileName.endsWith(ext)) ||
+           codeExtensions.some(ext => fileName.endsWith(ext));
   };
 
   const filteredNotes = notes.filter(n =>
@@ -1353,6 +1378,60 @@ export function VaultDashboard() {
                 }}
               />
             )}
+            {(() => {
+              const fileName = previewFile.file.name.toLowerCase();
+              const officeExtensions = ['.ppt', '.pptx', '.doc', '.docx', '.xls', '.xlsx', '.odt', '.odp', '.ods'];
+              const isOfficeFile = officeExtensions.some(ext => fileName.endsWith(ext));
+
+              if (isOfficeFile) {
+                setPreviewLoading(false);
+                return (
+                  <div className={`${darkMode ? 'bg-slate-800' : 'bg-white'} rounded-2xl p-12 max-w-2xl mx-auto text-center`}>
+                    <div className={`w-20 h-20 ${darkMode ? 'bg-slate-700' : 'bg-slate-100'} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
+                      <FileText className={`w-10 h-10 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                    </div>
+                    <h3 className={`text-xl font-semibold mb-2 ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                      {previewFile.file.name}
+                    </h3>
+                    <p className={`text-sm mb-6 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                      {formatBytes(previewFile.file.size)} • Office Document
+                    </p>
+                    <p className={`mb-8 ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                      Preview for this file type is available. Click download to open it in your preferred application.
+                    </p>
+                    <button
+                      onClick={() => handleDownloadFile(previewFile.file)}
+                      className={`px-8 py-3 ${darkMode ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-900 hover:bg-slate-800'} text-white rounded-xl font-medium transition-colors flex items-center gap-2 mx-auto`}
+                    >
+                      <Download className="w-5 h-5" />
+                      Download File
+                    </button>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            {textContent && (() => {
+              setPreviewLoading(false);
+              return (
+                <div className={`${darkMode ? 'bg-slate-800' : 'bg-white'} rounded-2xl p-6 max-w-4xl max-h-[80vh] overflow-auto mx-auto`}>
+                  <div className={`flex items-center justify-between mb-4 pb-4 border-b ${darkMode ? 'border-slate-700' : 'border-slate-200'}`}>
+                    <div>
+                      <h3 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {previewFile.file.name}
+                      </h3>
+                      <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                        {formatBytes(previewFile.file.size)}
+                      </p>
+                    </div>
+                    <FileText className={`w-8 h-8 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
+                  </div>
+                  <pre className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'} whitespace-pre-wrap break-words font-mono`}>
+                    {textContent}
+                  </pre>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
