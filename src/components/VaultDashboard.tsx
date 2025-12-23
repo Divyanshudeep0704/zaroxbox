@@ -61,6 +61,7 @@ export function VaultDashboard() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getFileCategory = (type: string) => {
@@ -378,10 +379,12 @@ export function VaultDashboard() {
     if (!isPreviewable(file)) return;
 
     showToast('Loading preview...', 'loading');
+    setPreviewLoading(true);
     try {
       const blob = await storage.getFileData(file.id);
       if (!blob) {
         setToasts(prev => prev.filter(t => t.type !== 'loading'));
+        setPreviewLoading(false);
         showToast('Error loading preview', 'error');
         return;
       }
@@ -391,6 +394,7 @@ export function VaultDashboard() {
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
     } catch (error) {
       setToasts(prev => prev.filter(t => t.type !== 'loading'));
+      setPreviewLoading(false);
       showToast('Error loading preview', 'error');
     }
   };
@@ -399,6 +403,7 @@ export function VaultDashboard() {
     if (previewFile) {
       URL.revokeObjectURL(previewFile.url);
       setPreviewFile(null);
+      setPreviewLoading(false);
     }
   };
 
@@ -1277,12 +1282,27 @@ export function VaultDashboard() {
           >
             <X className="w-6 h-6" />
           </button>
+
+          {previewLoading && (
+            <div className="absolute inset-0 flex items-center justify-center z-20">
+              <div className="bg-black bg-opacity-70 rounded-2xl p-8 flex flex-col items-center gap-4">
+                <Loader className="w-12 h-12 text-white animate-spin" />
+                <p className="text-white font-medium">Loading preview...</p>
+              </div>
+            </div>
+          )}
+
           <div className="max-w-6xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
             {previewFile.file.type.startsWith('image/') && (
               <img
                 src={previewFile.url}
                 alt={previewFile.file.name}
                 className="w-full h-full object-contain rounded-lg"
+                onLoad={() => setPreviewLoading(false)}
+                onError={() => {
+                  setPreviewLoading(false);
+                  showToast('Error loading image', 'error');
+                }}
               />
             )}
             {previewFile.file.type.startsWith('video/') && (
@@ -1290,6 +1310,11 @@ export function VaultDashboard() {
                 src={previewFile.url}
                 controls
                 className="w-full h-full rounded-lg"
+                onLoadedData={() => setPreviewLoading(false)}
+                onError={() => {
+                  setPreviewLoading(false);
+                  showToast('Error loading video', 'error');
+                }}
               />
             )}
             {previewFile.file.type.startsWith('audio/') && (
@@ -1308,6 +1333,11 @@ export function VaultDashboard() {
                   controls
                   className="w-full"
                   autoPlay
+                  onLoadedData={() => setPreviewLoading(false)}
+                  onError={() => {
+                    setPreviewLoading(false);
+                    showToast('Error loading audio', 'error');
+                  }}
                 />
               </div>
             )}
@@ -1316,6 +1346,11 @@ export function VaultDashboard() {
                 src={previewFile.url}
                 className="w-full h-full rounded-lg"
                 title={previewFile.file.name}
+                onLoad={() => setPreviewLoading(false)}
+                onError={() => {
+                  setPreviewLoading(false);
+                  showToast('Error loading PDF', 'error');
+                }}
               />
             )}
           </div>

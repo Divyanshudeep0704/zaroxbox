@@ -26,8 +26,16 @@ Every user action now provides immediate visual feedback through toast notificat
 - **Renaming**: "File renamed successfully!"
 - **Adding to Favorites**: "Added to favorites"
 - **Removing from Favorites**: "Removed from favorites"
-- **Loading Preview**: "Loading preview..." → Auto-dismisses when preview opens
+- **Loading Preview**: "Loading preview..." with spinner overlay until content fully loads
 - **Creating Note**: "Creating note..." → "Note created successfully!"
+
+#### Preview Loading States
+- **Images**: Shows loading spinner until image loads, then displays
+- **Videos**: Shows loading spinner until video data loads, then displays
+- **Audio**: Shows loading spinner until audio data loads, then displays
+- **PDFs**: Shows loading spinner until PDF loads in iframe, then displays
+- **PPT/Documents**: Shows loading spinner overlay during load
+- **Error Handling**: If preview fails, shows error toast and removes spinner
 
 ### Toast Features
 - **Auto-dismiss**: Success and info toasts auto-dismiss after 3 seconds
@@ -185,7 +193,11 @@ All icons are dynamically sized for mobile devices:
 - [ ] Delete file - see loading → success toast + undo option
 - [ ] Rename file - see success toast
 - [ ] Add to favorites - see success toast
-- [ ] Preview file - see loading toast
+- [ ] Preview image - see spinner until image loads
+- [ ] Preview video - see spinner until video loads
+- [ ] Preview audio - see spinner until audio loads
+- [ ] Preview PDF - see spinner until PDF loads
+- [ ] Preview PPT/document - see spinner during load
 - [ ] Tap file on mobile - see action sheet
 - [ ] All icons properly sized on mobile
 - [ ] All touch targets easily tappable
@@ -194,3 +206,4 @@ All icons are dynamically sized for mobile devices:
 - [ ] Modals work on mobile
 - [ ] Toast notifications stack properly
 - [ ] Loading spinners animate smoothly
+- [ ] Preview overlay shows "Loading preview..." text
